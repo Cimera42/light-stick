@@ -20,7 +20,7 @@ Currently built to run on the Firebeetle-ESP32 & OLED screen I/O shield.
 
 | ESP32 | SD card          | USB  | WS2812 |
 | ----- | ---------------- | ---- | ------ |
-| GND   | GND              | GND  | GND    |
+| GND   | GND              | GND  | -GND   |
 | VCC   |                  | VBUS | +VCC   |
 | 3v3   | 3v               |      |        |
 | D2    | CS               |      |        |
@@ -33,10 +33,11 @@ Currently built to run on the Firebeetle-ESP32 & OLED screen I/O shield.
 
 List of things to be done at some point.
 
-| Todo                           | Priority |
-| ------------------------------ | -------- |
-| Brightness control             | H        |
-| Speed control                  | H        |
-| Image file rotation correction | M        |
-| Directory support              | L        |
-| Status screen                  | L        |
+| Todo                            | Priority |
+| ------------------------------- | -------- |
+| Brightness control              | H        |
+| Speed control                   | H        |
+| Document correct SD card wiring | M        |
+| Image file rotation correction  | M        |
+| Directory support               | L        |
+| Status screen                   | L        |
