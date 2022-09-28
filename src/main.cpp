@@ -206,6 +206,14 @@ bool load_file(std::string name)
 
 void setup()
 {
+    /*
+     * INIT LEDS
+     */
+    strip.Begin();
+    animState = 0;
+    strip.ClearTo(RgbColor(0, 0, 0));
+    strip.Show();
+
     Serial.begin(115200);
     while (!Serial)
     {
@@ -260,13 +268,6 @@ void setup()
     rootFileCount = getDirectoryFileCount(root);
     printDirectory(root, FILES_ON_SCREEN, 0, 0);
     display.display();
-
-    /*
-     * INIT LEDS
-     */
-    strip.Begin();
-    animState = 0;
-    strip.ClearTo(RgbColor(0, 0, 0));
 }
 
 Direction getJoystickDir()
