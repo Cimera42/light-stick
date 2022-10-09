@@ -48,7 +48,6 @@ void LoopAnimUpdate(const AnimationParam &param)
         image.Blt(strip, 0, 0, animState, image.Width());
         animState = animState + 1; // increment and wrap
 
-        uint8_t brightnessGamma = gamma(brightness);
         for (uint8_t i = 0; i < PixelCount; i++)
         {
             RgbColor colour = strip.GetPixelColor(i);
