@@ -364,6 +364,13 @@ void loop()
     if (buttons[0].pressed)
     {
         buttons[0].pressed = false;
+
+        if (animations.IsAnimating())
+        {
+            animations.StopAll();
+            strip.ClearTo(RgbColor(0, 0, 0));
+            strip.Show();
+        }
     }
 
     // start/pause
@@ -372,9 +379,14 @@ void loop()
         buttons[1].pressed = false;
         if (animations.IsAnimating())
         {
-            animations.StopAll();
-            strip.ClearTo(RgbColor(0, 0, 0));
-            strip.Show();
+            if (animations.IsPaused())
+            {
+                animations.Resume();
+            }
+            else
+            {
+                animations.Pause();
+            }
         }
         else
         {
