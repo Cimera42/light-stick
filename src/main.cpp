@@ -36,6 +36,8 @@ NeoBitmapFile<NeoGrbFeature, File> image;
 
 uint16_t animState;
 
+uint8_t brightness = 50;
+
 void LoopAnimUpdate(const AnimationParam &param)
 {
     // wait for this animation to complete,
@@ -45,6 +47,18 @@ void LoopAnimUpdate(const AnimationParam &param)
         // draw the complete row at animState to the complete strip
         image.Blt(strip, 0, 0, animState, image.Width());
         animState = animState + 1; // increment and wrap
+
+        uint8_t brightnessGamma = gamma(brightness);
+        for (uint8_t i = 0; i < PixelCount; i++)
+        {
+            RgbColor colour = strip.GetPixelColor(i);
+            strip.SetPixelColor(
+                i,
+                RgbColor(
+                    (colour.R * brightness) / 100,
+                    (colour.G * brightness) / 100,
+                    (colour.B * brightness) / 100));
+        }
 
         // done, time to restart this position tracking animation/timer
         if (animState < image.Height())
@@ -106,9 +120,10 @@ enum Mode
 enum Direction
 {
     DIR_DOWN,  // 0
-    DIR_LEFT,  // 650
-    DIR_UP,    // 1500
-    DIR_RIGHT, // 3100
+    DIR_LEFT,  // 650 / 819
+    DIR_UP,    // 1500 / 1637
+    DIR_IN,    // ? / 2457
+    DIR_RIGHT, // 3100 / 3276
     DIR_NONE,  // 4095
 };
 
@@ -204,6 +219,28 @@ bool load_file(std::string name)
     return true;
 }
 
+void printBrightness()
+{
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.printf("Brightness: %d", brightness);
+    display.display();
+}
+void printFiles()
+{
+    int toSkip = 0;
+    if (selectedFile > 3)
+    {
+        toSkip = selectedFile - 3;
+    }
+    if (selectedFile > rootFileCount - 4)
+    {
+        toSkip = rootFileCount - 4;
+    }
+    printDirectory(root, FILES_ON_SCREEN, toSkip, selectedFile);
+    display.display();
+}
+
 void setup()
 {
     /*
@@ -225,7 +262,7 @@ void setup()
      */
     pinMode(B_1, INPUT);
     pinMode(B_2, INPUT);
-    pinMode(JOYSTICK, INPUT);
+    pinMode(JOYSTICK, INPUT_PULLUP);
     for (int i = 0; i < buttonCount; i++)
     {
         pinMode(buttons[i].pin, INPUT_PULLUP);
@@ -272,21 +309,25 @@ void setup()
 
 Direction getJoystickDir()
 {
-    auto read = analogRead(JOYSTICK);
+    uint16_t read = analogRead(JOYSTICK);
 
-    if (read < 300)
+    if (read < 409)
     {
         return DIR_DOWN;
     }
-    else if (read < 1000)
+    else if (read < 1228)
     {
         return DIR_LEFT;
     }
-    else if (read < 2300)
+    else if (read < 2047)
     {
         return DIR_UP;
     }
-    else if (read < 3600)
+    else if (read < 2867)
+    {
+        return DIR_IN;
+    }
+    else if (read < 3686)
     {
         return DIR_RIGHT;
     }
@@ -298,26 +339,6 @@ Direction getJoystickDir()
 
 void loop()
 {
-    // if (!digitalRead(D3))
-    //     display.print("A");
-    // if (!digitalRead(D8))
-    // {
-    //     display.print("B");
-
-    //     // if (!pressed)
-    //     // {
-    //     //     pressed = true;
-    //     //     // auto root = SD.open("/");
-    //     //     // printDirectory(root, 0);
-    //     //     // root.close();
-    //     // }
-    //     col = (col + 1) % 4;
-    // }
-    // else
-    // {
-    //     pressed = false;
-    // }
-    // Serial.println(analogRead(A0));
     auto joystickDir = getJoystickDir();
     if (joystickDir == DIR_NONE)
     {
@@ -329,38 +350,43 @@ void loop()
     else if (!didDirection)
     {
         didDirection = true;
-        bool changed = false;
+        bool dirChanged = false;
         if (joystickDir == DIR_UP)
         {
             if (selectedFile == 0)
                 selectedFile = rootFileCount - 1;
             else
                 selectedFile -= 1;
-            changed = true;
+            printFiles();
         }
         else if (joystickDir == DIR_DOWN)
         {
             selectedFile = (selectedFile + 1) % rootFileCount;
-            changed = true;
+            printFiles();
         }
-
-        if (changed)
+        else if (joystickDir == DIR_LEFT)
         {
-            int toSkip = 0;
-            if (selectedFile > 3)
+            if (brightness > 0)
             {
-                toSkip = selectedFile - 3;
+                brightness -= 10;
+                printBrightness();
             }
-            if (selectedFile > rootFileCount - 4)
+        }
+        else if (joystickDir == DIR_RIGHT)
+        {
+            if (brightness < 100)
             {
-                toSkip = rootFileCount - 4;
+                brightness += 10;
+                printBrightness();
             }
-            printDirectory(root, FILES_ON_SCREEN, toSkip, selectedFile);
-            display.display();
+        }
+        else if (joystickDir == DIR_IN)
+        {
+            printFiles();
         }
     }
 
-    // back
+    // back/cancel
     if (buttons[0].pressed)
     {
         buttons[0].pressed = false;
