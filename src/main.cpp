@@ -77,8 +77,10 @@ void LoopAnimUpdate(const AnimationParam &param)
         else
         {
             strip.ClearTo(RgbColor(0, 0, 0));
+            strip.Show();
             // Show file list once animation finishes
             printFiles();
+            return;
         }
         strip.Show();
     }
