@@ -36,7 +36,16 @@ NeoBitmapFile<NeoGrbFeature, File> image;
 
 uint16_t animState;
 
-uint8_t brightness = 50;
+uint8_t brightnessIndex = 10;
+
+uint8_t lookupBrightness(uint8_t inBright)
+{
+    return inBright * inBright;
+}
+const uint8_t MAX_BRIGHT_INDEX = 10;
+const uint8_t MAX_BRIGHT = lookupBrightness(MAX_BRIGHT_INDEX);
+
+void printFiles();
 
 void LoopAnimUpdate(const AnimationParam &param)
 {
@@ -48,15 +57,16 @@ void LoopAnimUpdate(const AnimationParam &param)
         image.Blt(strip, 0, 0, animState, image.Width());
         animState = animState + 1; // increment and wrap
 
+        uint8_t brightness = lookupBrightness(brightnessIndex);
         for (uint8_t i = 0; i < PixelCount; i++)
         {
             RgbColor colour = strip.GetPixelColor(i);
             strip.SetPixelColor(
                 i,
                 RgbColor(
-                    (colour.R * brightness) / 100,
-                    (colour.G * brightness) / 100,
-                    (colour.B * brightness) / 100));
+                    (colour.R * brightness) / MAX_BRIGHT,
+                    (colour.G * brightness) / MAX_BRIGHT,
+                    (colour.B * brightness) / MAX_BRIGHT));
         }
 
         // done, time to restart this position tracking animation/timer
@@ -67,6 +77,8 @@ void LoopAnimUpdate(const AnimationParam &param)
         else
         {
             strip.ClearTo(RgbColor(0, 0, 0));
+            // Show file list once animation finishes
+            printFiles();
         }
         strip.Show();
     }
@@ -222,7 +234,7 @@ void printBrightness()
 {
     display.clearDisplay();
     display.setCursor(0, 0);
-    display.printf("Brightness: %d", brightness);
+    display.printf("Brightness: %d (%d%%)", brightnessIndex, lookupBrightness(brightnessIndex));
     display.display();
 }
 void printFiles()
@@ -365,19 +377,19 @@ void loop()
         }
         else if (joystickDir == DIR_LEFT)
         {
-            if (brightness > 0)
+            if (brightnessIndex > 0)
             {
-                brightness -= 10;
-                printBrightness();
+                brightnessIndex -= 1;
             }
+            printBrightness();
         }
         else if (joystickDir == DIR_RIGHT)
         {
-            if (brightness < 100)
+            if (brightnessIndex < MAX_BRIGHT_INDEX)
             {
-                brightness += 10;
-                printBrightness();
+                brightnessIndex += 1;
             }
+            printBrightness();
         }
         else if (joystickDir == DIR_IN)
         {
@@ -395,6 +407,7 @@ void loop()
             animations.StopAll();
             strip.ClearTo(RgbColor(0, 0, 0));
             strip.Show();
+            printFiles();
         }
     }
 
@@ -422,6 +435,8 @@ void loop()
             {
                 animState = 0;
                 animations.StartAnimation(0, 2500 / image.Height(), LoopAnimUpdate);
+                display.clearDisplay();
+                display.display();
             }
         }
     }
