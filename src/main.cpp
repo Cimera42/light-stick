@@ -13,7 +13,7 @@
 // SPIClass *SPI1;
 // static const int VSPI_MISO = 19;
 // static const int VSPI_MOSI = 23;
-static const int VSPI_CS = D2;
+static const int VSPI_CS = 5;
 // static const int VSPI_CLK = 18;
 
 // static const int HSPI_MISO = 12;
@@ -21,12 +21,16 @@ static const int VSPI_CS = D2;
 // static const int HSPI_CS = 15;
 // static const int HSPI_CLK = 14;
 
+int start = 0;
+
+#ifndef LIGHT_STICK_NO_INPUT
 static const int B_1 = D3;
 static const int B_2 = D8;
 static const int JOYSTICK = A0;
+#endif
 
 const uint16_t PixelCount = 144; // the sample images are meant for 144 pixels
-const uint16_t PixelPin = D4;
+const uint16_t PixelPin = 15;
 const uint16_t AnimCount = 1; // we only need one
 
 NeoPixelBus<NeoGrbFeature, NeoWs2812xMethod> strip(PixelCount, PixelPin);
@@ -34,9 +38,15 @@ NeoPixelAnimator animations(AnimCount); // NeoPixel animation management object
 
 NeoBitmapFile<NeoGrbFeature, File> image;
 
+NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *buffer1;
+bool buffer1Written = false;
+NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *buffer2;
+bool buffer2Written = false;
+NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *activeBuffer;
+
 uint16_t animState;
 
-uint8_t brightnessIndex = 10;
+uint8_t brightnessIndex = 2;
 
 uint8_t lookupBrightness(uint8_t inBright)
 {
@@ -47,6 +57,14 @@ const uint8_t MAX_BRIGHT = lookupBrightness(MAX_BRIGHT_INDEX);
 
 void printFiles();
 
+uint16_t _width = 144;
+uint16_t PER_BUFFER_HEIGHT = 50;
+
+uint16_t MyLayoutMap(int16_t x, int16_t y)
+{
+    return y * _width + x;
+}
+
 void LoopAnimUpdate(const AnimationParam &param)
 {
     // wait for this animation to complete,
@@ -54,22 +72,46 @@ void LoopAnimUpdate(const AnimationParam &param)
     if (param.state == AnimationState_Completed)
     {
         // draw the complete row at animState to the complete strip
-        image.Blt(strip, 0, 0, animState, image.Width());
+        // image.Blt(strip, 0, 0, animState, min((uint16_t)144, image.Width()));
+        activeBuffer->Blt(
+            strip,
+            0,                             // xDest
+            0,                             // yDest
+            0,                             // xSrc
+            animState % PER_BUFFER_HEIGHT, // ySrc
+            _width,                        // wSrc
+            1,                             // hSrc
+            MyLayoutMap);
         animState = animState + 1; // increment and wrap
 
-        uint8_t brightness = lookupBrightness(brightnessIndex);
-        for (uint8_t i = 0; i < PixelCount; i++)
+        if (animState % PER_BUFFER_HEIGHT == 0)
         {
-            RgbColor colour = strip.GetPixelColor(i);
-            strip.SetPixelColor(
-                i,
-                RgbColor(
-                    (colour.R * brightness) / MAX_BRIGHT,
-                    (colour.G * brightness) / MAX_BRIGHT,
-                    (colour.B * brightness) / MAX_BRIGHT));
+            if (activeBuffer == buffer1)
+            {
+                activeBuffer = buffer2;
+                buffer1Written = false;
+            }
+            else
+            {
+                activeBuffer = buffer1;
+                buffer2Written = false;
+            }
         }
 
+        // uint8_t brightness = lookupBrightness(brightnessIndex);
+        // for (uint8_t i = 0; i < PixelCount; i++)
+        // {
+        //     RgbColor colour = strip.GetPixelColor(i);
+        //     strip.SetPixelColor(
+        //         i,
+        //         RgbColor(
+        //             (colour.R * brightness) / MAX_BRIGHT,
+        //             (colour.G * brightness) / MAX_BRIGHT,
+        //             (colour.B * brightness) / MAX_BRIGHT));
+        // }
+
         // done, time to restart this position tracking animation/timer
+        // if (animState < image.Height())
         if (animState < image.Height())
         {
             animations.RestartAnimation(param.index);
@@ -78,6 +120,12 @@ void LoopAnimUpdate(const AnimationParam &param)
         {
             strip.ClearTo(RgbColor(0, 0, 0));
             strip.Show();
+
+            int end = millis();
+            int diff = end - start;
+            // Serial.printf("End %d, diff %d. per frame %d\n", end, diff, diff / image.Height());
+            Serial.printf("End %d, diff %d. per frame %d\n", end, diff, diff / image.Height());
+
             // Show file list once animation finishes
             printFiles();
             return;
@@ -86,6 +134,7 @@ void LoopAnimUpdate(const AnimationParam &param)
     }
 }
 
+#ifndef LIGHT_STICK_NO_INPUT
 void button_isr(int n);
 
 struct Button
@@ -123,6 +172,7 @@ void button_isr(int n)
         buttons[n].last_time = button_time;
     }
 }
+#endif
 
 enum Mode
 {
@@ -130,6 +180,7 @@ enum Mode
     PLAYING,
 };
 
+#ifndef LIGHT_STICK_NO_INPUT
 enum Direction
 {
     DIR_DOWN,  // 0
@@ -139,8 +190,11 @@ enum Direction
     DIR_RIGHT, // 3100 / 3276
     DIR_NONE,  // 4095
 };
+#endif
 
+#ifndef LIGHT_STICK_NO_DISPLAY
 Adafruit_SSD1306 display = Adafruit_SSD1306(128, 64, &WIRE);
+#endif
 static const int FILES_ON_SCREEN = 7;
 File root;
 int rootFileCount = 0;
@@ -162,9 +216,11 @@ int getDirectoryFileCount(File dir)
 }
 void printDirectory(File dir, int count, int skip, int selected)
 {
+    dir.rewindDirectory();
+
+#ifndef LIGHT_STICK_NO_DISPLAY
     display.clearDisplay();
     display.setCursor(0, 0);
-    dir.rewindDirectory();
     for (int i = 0; i < count + skip; i++)
     {
         File entry = dir.openNextFile();
@@ -186,6 +242,18 @@ void printDirectory(File dir, int count, int skip, int selected)
 
         entry.close();
     }
+#else
+    while (true)
+    {
+        File entry = dir.openNextFile();
+        if (!entry)
+            break;
+
+        Serial.println(entry.name());
+
+        entry.close();
+    }
+#endif
 }
 std::string getDirectoryNthFileName(File dir, int selected)
 {
@@ -209,12 +277,16 @@ std::string getDirectoryNthFileName(File dir, int selected)
 
 bool load_file(std::string name)
 {
+    Serial.printf("Loading %s\n", name.c_str());
+
     File bitmapFile = SD.open(name.c_str());
     if (!bitmapFile)
     {
         Serial.println("File open fail, or not present");
+#ifndef LIGHT_STICK_NO_DISPLAY
         display.println("No such file");
         display.display();
+#endif
         return false;
     }
     Serial.println("Image found");
@@ -222,22 +294,62 @@ bool load_file(std::string name)
     if (!image.Begin(bitmapFile))
     {
         Serial.println("File format fail, not a supported bitmap");
+#ifndef LIGHT_STICK_NO_DISPLAY
         display.println("Bad format");
         display.display();
+#endif
         return false;
     }
     Serial.println("Image loaded");
+
+    _width = min((uint16_t)144, image.Width());
+
+    Serial.printf("Width x Height (%d x %d)\n", _width, image.Height());
+#ifndef LIGHT_STICK_NO_DISPLAY
     display.println("img loaded");
+#endif
+
+    Serial.println("Starting copy");
+    if (buffer1)
+    {
+        delete buffer1;
+        buffer1 = nullptr;
+        Serial.println("Deleted buffer1");
+    }
+    if (buffer2)
+    {
+        delete buffer2;
+        buffer2 = nullptr;
+        Serial.println("Deleted buffer2");
+    }
+
+    Serial.println(ESP.getFreeHeap());
+    buffer1 = new NeoBuffer<NeoBufferMethod<NeoGrbFeature>>(_width, PER_BUFFER_HEIGHT, NULL);
+    Serial.println("Buffer1 created");
+    buffer2 = new NeoBuffer<NeoBufferMethod<NeoGrbFeature>>(_width, PER_BUFFER_HEIGHT, NULL);
+    Serial.println("Buffer2 created");
+    Serial.println(ESP.getFreeHeap());
+
+    image.Blt(*buffer1, 0, 0, 0, 0, image.Width(), PER_BUFFER_HEIGHT, MyLayoutMap);
+    Serial.println("Copy to buffer1 completed");
+    image.Blt(*buffer2, 0, 0, 0, PER_BUFFER_HEIGHT, image.Width(), PER_BUFFER_HEIGHT, MyLayoutMap);
+    Serial.println("Copy to buffer2 completed");
+
+    activeBuffer = buffer1;
 
     return true;
 }
 
 void printBrightness()
 {
+#ifndef LIGHT_STICK_NO_DISPLAY
     display.clearDisplay();
     display.setCursor(0, 0);
     display.printf("Brightness: %d (%d%%)", brightnessIndex, lookupBrightness(brightnessIndex));
     display.display();
+#else
+    Serial.printf("Brightness: %d (%d%%)", brightnessIndex, lookupBrightness(brightnessIndex));
+#endif
 }
 void printFiles()
 {
@@ -251,7 +363,9 @@ void printFiles()
         toSkip = rootFileCount - 4;
     }
     printDirectory(root, FILES_ON_SCREEN, toSkip, selectedFile);
+#ifndef LIGHT_STICK_NO_DISPLAY
     display.display();
+#endif
 }
 
 void setup()
@@ -270,6 +384,7 @@ void setup()
         ; // wait for serial port to connect. Needed for native USB port only
     }
 
+#ifndef LIGHT_STICK_NO_INPUT
     /*
      * INIT BUTTONS
      */
@@ -283,7 +398,9 @@ void setup()
             buttons[i].pin, buttons[i].isr,
             RISING);
     }
+#endif
 
+#ifndef LIGHT_STICK_NO_DISPLAY
     /*
      * INIT DISPLAY
      */
@@ -295,6 +412,7 @@ void setup()
     display.setTextSize(1);
     display.setTextColor(SSD1306_WHITE);
     display.setCursor(0, 0);
+#endif
 
     /*
      * INIT SD CARD
@@ -303,23 +421,30 @@ void setup()
     if (!SD.begin(VSPI_CS))
     {
         Serial.println("initialization failed!");
+#ifndef LIGHT_STICK_NO_DISPLAY
         display.println("SD Card Init failed");
         display.display();
+#endif
         while (1)
             ;
     }
     else
     {
         Serial.println("initialization done.");
+#ifndef LIGHT_STICK_NO_DISPLAY
         display.println("SD Card Init success");
+#endif
     }
 
     root = SD.open("/");
     rootFileCount = getDirectoryFileCount(root);
     printDirectory(root, FILES_ON_SCREEN, 0, 0);
+#ifndef LIGHT_STICK_NO_DISPLAY
     display.display();
+#endif
 }
 
+#ifndef LIGHT_STICK_NO_INPUT
 Direction getJoystickDir()
 {
     uint16_t read = analogRead(JOYSTICK);
@@ -349,9 +474,11 @@ Direction getJoystickDir()
         return DIR_NONE;
     }
 }
+#endif
 
 void loop()
 {
+#ifndef LIGHT_STICK_NO_INPUT
     auto joystickDir = getJoystickDir();
     if (joystickDir == DIR_NONE)
     {
@@ -442,9 +569,25 @@ void loop()
             }
         }
     }
+#endif
 
     if (animations.IsAnimating())
     {
         animations.UpdateAnimations();
     }
+#ifdef LIGHT_STICK_NO_INPUT
+    else
+    {
+        std::string name = "/" + getDirectoryNthFileName(root, 15);
+        bool loaded = load_file(name);
+
+        if (loaded)
+        {
+            start = millis();
+            Serial.printf("Start %d\n", start);
+            animState = 0;
+            animations.StartAnimation(0, 5, LoopAnimUpdate);
+        }
+    }
+#endif
 }
