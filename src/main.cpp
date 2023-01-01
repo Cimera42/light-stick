@@ -4,6 +4,7 @@
 #include <NeoPixelBus.h>
 #include <NeoPixelAnimator.h>
 #include <Adafruit_SSD1306.h>
+#include <vector>
 
 // #define BUTTON_A  0
 // #define BUTTON_B 16
@@ -38,11 +39,8 @@ NeoPixelAnimator animations(AnimCount); // NeoPixel animation management object
 
 NeoBitmapFile<NeoGrbFeature, File> image;
 
-NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *buffer1;
-bool buffer1Written = false;
-NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *buffer2;
-bool buffer2Written = false;
-NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *activeBuffer;
+std::vector<NeoBuffer<NeoBufferMethod<NeoGrbFeature>> *> buffers;
+uint8_t activeBuffer = 0;
 
 uint16_t animState;
 
@@ -58,7 +56,7 @@ const uint8_t MAX_BRIGHT = lookupBrightness(MAX_BRIGHT_INDEX);
 void printFiles();
 
 uint16_t _width = 144;
-uint16_t PER_BUFFER_HEIGHT = 50;
+uint16_t PER_BUFFER_HEIGHT = 100;
 
 uint16_t MyLayoutMap(int16_t x, int16_t y)
 {
@@ -73,7 +71,7 @@ void LoopAnimUpdate(const AnimationParam &param)
     {
         // draw the complete row at animState to the complete strip
         // image.Blt(strip, 0, 0, animState, min((uint16_t)144, image.Width()));
-        activeBuffer->Blt(
+        buffers[activeBuffer]->Blt(
             strip,
             0,                             // xDest
             0,                             // yDest
@@ -82,21 +80,13 @@ void LoopAnimUpdate(const AnimationParam &param)
             _width,                        // wSrc
             1,                             // hSrc
             MyLayoutMap);
-        animState = animState + 1; // increment and wrap
 
         if (animState % PER_BUFFER_HEIGHT == 0)
         {
-            if (activeBuffer == buffer1)
-            {
-                activeBuffer = buffer2;
-                buffer1Written = false;
-            }
-            else
-            {
-                activeBuffer = buffer1;
-                buffer2Written = false;
-            }
+            activeBuffer++;
         }
+
+        animState = animState + 1; // increment and wrap
 
         // uint8_t brightness = lookupBrightness(brightnessIndex);
         // for (uint8_t i = 0; i < PixelCount; i++)
@@ -310,32 +300,25 @@ bool load_file(std::string name)
 #endif
 
     Serial.println("Starting copy");
-    if (buffer1)
+    for (auto buffer : buffers)
     {
-        delete buffer1;
-        buffer1 = nullptr;
-        Serial.println("Deleted buffer1");
+        delete buffer;
     }
-    if (buffer2)
-    {
-        delete buffer2;
-        buffer2 = nullptr;
-        Serial.println("Deleted buffer2");
-    }
+    buffers.clear();
 
     Serial.println(ESP.getFreeHeap());
-    buffer1 = new NeoBuffer<NeoBufferMethod<NeoGrbFeature>>(_width, PER_BUFFER_HEIGHT, NULL);
-    Serial.println("Buffer1 created");
-    buffer2 = new NeoBuffer<NeoBufferMethod<NeoGrbFeature>>(_width, PER_BUFFER_HEIGHT, NULL);
-    Serial.println("Buffer2 created");
-    Serial.println(ESP.getFreeHeap());
+    uint8_t bufferCount = (image.Height() + PER_BUFFER_HEIGHT - 1) / PER_BUFFER_HEIGHT; // ceil division
+    buffers.resize(bufferCount);
+    for (uint8_t i = 0; i < bufferCount; i++)
+    {
+        buffers[i] = new NeoBuffer<NeoBufferMethod<NeoGrbFeature>>(_width, PER_BUFFER_HEIGHT, NULL);
+        image.Blt(*buffers[i], 0, 0, 0, PER_BUFFER_HEIGHT * i, image.Width(), PER_BUFFER_HEIGHT, MyLayoutMap);
+        Serial.printf("Buffer %d created\n", i);
+        Serial.println(ESP.getFreeHeap());
+    }
+    Serial.println("Buffers created");
 
-    image.Blt(*buffer1, 0, 0, 0, 0, image.Width(), PER_BUFFER_HEIGHT, MyLayoutMap);
-    Serial.println("Copy to buffer1 completed");
-    image.Blt(*buffer2, 0, 0, 0, PER_BUFFER_HEIGHT, image.Width(), PER_BUFFER_HEIGHT, MyLayoutMap);
-    Serial.println("Copy to buffer2 completed");
-
-    activeBuffer = buffer1;
+    activeBuffer = 0;
 
     return true;
 }
@@ -384,6 +367,11 @@ void setup()
         ; // wait for serial port to connect. Needed for native USB port only
     }
 
+    Serial.printf("Total heap: %d\n", ESP.getHeapSize());
+    Serial.printf("Free heap: %d\n", ESP.getFreeHeap());
+    Serial.printf("Total PSRAM: %d\n", ESP.getPsramSize());
+    Serial.printf("Free PSRAM: %d\n", ESP.getFreePsram());
+
 #ifndef LIGHT_STICK_NO_INPUT
     /*
      * INIT BUTTONS
@@ -418,6 +406,9 @@ void setup()
      * INIT SD CARD
      */
     Serial.println("Initializing SD card...");
+    /*
+     *
+     */
     if (!SD.begin(VSPI_CS))
     {
         Serial.println("initialization failed!");
