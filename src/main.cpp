@@ -407,7 +407,8 @@ void setup()
      */
     Serial.println("Initializing SD card...");
     /*
-     *
+     * TODO use hardware
+     * https://www.reddit.com/r/esp32/comments/d71es9/a_breakdown_of_my_experience_trying_to_talk_to_an/
      */
     if (!SD.begin(VSPI_CS))
     {
